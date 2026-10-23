@@ -3,9 +3,8 @@
 secrets.h
 auth.h
 passwd
-mosquitto/config/passwd
-mosquitto/data/
-mosquitto/log/
+infra/mosquitto/data/
+infra/mosquitto/log/
 
 # Compilation
 build/
