@@ -1,0 +1,16 @@
+# Secrets : ne jamais publier
+.env
+secrets.h
+auth.h
+passwd
+mosquitto/config/passwd
+mosquitto/data/
+mosquitto/log/
+
+# Compilation
+build/
+*.bin
+*.elf
+
+# Windows
+Thumbs.db
