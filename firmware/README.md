@@ -9,6 +9,8 @@ Programmes Arduino IDE pour la carte LilyGO T-A7670 (ESP32). Chaque dossier est 
 | `tests/test_01_mqtt_bonjour` | 2026-10-23 | L'ESP32 se connecte au Wi-Fi et au broker, et publie « bonjour N » chaque seconde |
 | `tests/test_02_led_mpu` | 2026-10-24 | Clignotement d'une LED (GPIO 14) et lecture de l'inclinaison du MPU6050 (bibliothèque Adafruit) |
 | `tests/test_03_mpu_brut` | 2026-10-24 | Diagnostic du MPU6050 : identité, valeurs brutes, température |
+| `tests/test_04_mpu_mqtt` | 2026-10-24 | Le MPU6050 publie roulis et tangage bruts sur `rover/rover-01/imu`, une fois par seconde |
+| `tests/test_05_mpu_calibration` | 2026-10-24 | Étalonnage du MPU6050 sur ordre MQTT (`cmd/calib`), référence mémorisée en flash, publication de l'inclinaison corrigée |
 | `rover_cmd_led` | 2026-10-24 | Commande d'une LED par MQTT avec signal de vie et arrêt de sécurité |
 
 ## Branchements utilisés
@@ -26,7 +28,7 @@ Les GPIO 26, 27, 4 et 12 sont utilisées par le modem : ne pas s'en servir.
 
 - `PubSubClient` (2.8) : tests 01 et `rover_cmd_led`
 - `ArduinoJson` : `rover_cmd_led`
-- `Adafruit MPU6050` et `Adafruit Unified Sensor` : test 02 seulement
+- `Adafruit MPU6050` et `Adafruit Unified Sensor` : tests 02, 04 et 05
 
 Carte : **ESP32 Dev Module**, cœur ESP32 3.x.
 
@@ -50,3 +52,9 @@ Les programmes qui se connectent au réseau lisent `secrets.h`, placé à côté
 - **Mode maintenu (`hold`)** : la commande doit être renvoyée toutes les 0,5 s, sinon arrêt.
 - **Mode mémorisé (`latch`)** : la commande reste active tant que le signal de vie arrive.
 - Après une perte de liaison, la commande est effacée : rien ne redémarre tout seul.
+
+## Inclinaison du MPU6050 (tests 04 et 05)
+
+- Test 04 : publie `{"roll":..,"pitch":..}` sur `rover/rover-01/imu`, une fois par seconde (valeurs brutes). Si le capteur ne répond pas : `{"imu":"error"}`.
+- Test 05 : même publication avec un étalonnage. Le message `go` sur `rover/rover-01/cmd/calib` mesure 2 s et mémorise la position « à plat » dans la flash ; `reset` l'efface. L'étalonnage est refusé si le capteur bouge. Le résultat est publié sur `rover/rover-01/calib`, et `imu` contient `calibrated:true|false`.
+- À refaire si le capteur est déplacé ou fixé autrement sur le robot.
