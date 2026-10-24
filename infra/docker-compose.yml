@@ -18,5 +18,8 @@ services:
     command: tunnel --no-autoupdate run
     environment:
       - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+    # Permet au conteneur de joindre le SSH de la machine hôte (route ssh://host.docker.internal:22)
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       - mosquitto
