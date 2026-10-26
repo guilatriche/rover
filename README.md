@@ -10,13 +10,15 @@ Robot d'intérieur piloté à distance (châssis Lynxmotion 4WD1, carte ESP32 Li
 | --- | --- |
 | [`infra/`](infra/README.md) | Serveur : Mosquitto, tunnel Cloudflare et Docker Compose, à refaire sur une autre machine |
 | [`firmware/`](firmware/README.md) | Programmes de l'ESP32 (Arduino IDE) et programmes d'essai |
+| [`pilotage/`](pilotage/README.md) | Page web de pilotage (une seule page, sans installation) |
 | `docs/journal/` | Journal de bord : une entrée datée par séance |
 
 ## État d'avancement
 
 - Serveur : broker MQTT avec mot de passe, WebSocket chiffré par le tunnel, terminal SSH dans le navigateur.
 - Robot : liaison Wi-Fi vers le broker, commande d'une LED avec signes de vie et arrêt de sécurité, inclinaison mesurée, étalonnée et publiée.
-- À venir : page de pilotage, moteurs et pont en H, caméra, alarme d'inclinaison, 4G et GPS.
+- Pilotage : page web de pilotage (connexion, statut, signes de vie, modes `latch` et `hold`), validée avec la commande d'une LED.
+- À venir : moteurs et pont en H, caméra, alarme d'inclinaison, 4G et GPS.
 
 ## Sécurité
 

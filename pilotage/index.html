@@ -1,0 +1,439 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pilotage du rover</title>
+<style>
+  :root {
+    --fond: #f4f5f7; --carte: #ffffff; --texte: #1b1f24; --discret: #5b6470;
+    --bord: #d5d9df; --ok: #1a7f37; --alerte: #b42318; --info: #1f5fbf; --neutre: #6b7280;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --fond: #14171c; --carte: #1d2127; --texte: #e8eaed; --discret: #9aa3af;
+      --bord: #343a43; --ok: #4ac26b; --alerte: #ff7b72; --info: #6ea8fe; --neutre: #8b94a1;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 16px; background: var(--fond); color: var(--texte);
+    font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  }
+  main { max-width: 760px; margin: 0 auto; display: grid; gap: 16px; }
+  h1 { font-size: 1.4rem; margin: 0; }
+  h2 { font-size: 1rem; margin: 0 0 10px; color: var(--discret); text-transform: uppercase; letter-spacing: .04em; }
+  .carte { background: var(--carte); border: 1px solid var(--bord); border-radius: 10px; padding: 14px 16px; }
+  .ligne { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
+  label { display: grid; gap: 4px; font-size: .9rem; color: var(--discret); flex: 1 1 180px; }
+  input { font: inherit; padding: 8px 10px; border: 1px solid var(--bord); border-radius: 6px; background: var(--fond); color: var(--texte); min-width: 0; }
+  button { font: inherit; padding: 9px 14px; border-radius: 6px; border: 1px solid var(--bord); background: var(--carte); color: var(--texte); cursor: pointer; }
+  button.principal { background: var(--info); color: #fff; border-color: var(--info); }
+  button[disabled] { opacity: .5; cursor: not-allowed; }
+  button.actif { background: var(--ok); color: #fff; border-color: var(--ok); }
+  .pastille { display: inline-block; padding: 2px 10px; border-radius: 999px; font-weight: 600; font-size: .9rem; border: 1px solid currentColor; }
+  .ok { color: var(--ok); } .alerte { color: var(--alerte); } .neutre { color: var(--neutre); } .info { color: var(--info); }
+  .grille { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
+  .valeur { font-size: 1.5rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .legende { font-size: .85rem; color: var(--discret); }
+  #journal { font: .82rem/1.4 ui-monospace, Consolas, monospace; max-height: 220px; overflow: auto; margin: 0; white-space: pre-wrap; word-break: break-word; }
+  .cmd { display: grid; gap: 14px; }
+  .cmd input[type=range] { width: 100%; padding: 0; accent-color: var(--info); }
+  .choix { display: flex; flex-wrap: wrap; gap: 14px; }
+  .choix label { flex: 0 1 auto; display: flex; align-items: center; gap: 6px; color: var(--texte); font-size: 1rem; }
+  .choix input { padding: 0; }
+  .gros { font-size: 1.15rem; padding: 16px 12px; font-weight: 650; touch-action: none; user-select: none; -webkit-user-select: none; }
+  .boutons { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  button.avancer { background: var(--ok); color: #fff; border-color: var(--ok); }
+  button.avancer.presse { filter: brightness(1.25); outline: 3px solid var(--ok); }
+  button.stop { background: var(--alerte); color: #fff; border-color: var(--alerte); }
+  .note { font-size: .85rem; color: var(--discret); margin: 8px 0 0; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Pilotage du rover</h1>
+
+  <section class="carte" aria-labelledby="t-connexion">
+    <h2 id="t-connexion">Connexion au broker</h2>
+    <div class="ligne">
+      <label>Adresse WebSocket
+        <input id="url" type="text" value="wss://rover.gretier.xyz/mqtt" spellcheck="false" autocomplete="off">
+      </label>
+      <label>Utilisateur
+        <input id="utilisateur" type="text" value="rover" autocomplete="username">
+      </label>
+      <label>Mot de passe
+        <input id="mdp" type="password" autocomplete="current-password">
+      </label>
+      <button id="bt-connexion" class="principal" type="button">Se connecter</button>
+    </div>
+    <p class="note">Par le tunnel : <code>wss://rover.gretier.xyz/mqtt</code>. En réseau local : <code>ws://adresse-de-la-VM:9001</code> (la page doit alors être ouverte depuis un fichier, pas depuis une page https). Le mot de passe n'est jamais enregistré.</p>
+    <p>État : <span id="etat-connexion" class="pastille neutre">déconnecté</span></p>
+    <p class="legende" id="detail-connexion" style="margin:0"></p>
+  </section>
+
+  <section class="carte" aria-labelledby="t-robot">
+    <h2 id="t-robot">État du robot</h2>
+    <div class="grille">
+      <div><div class="legende">Robot</div><div class="valeur"><span id="v-online" class="pastille neutre">inconnu</span></div></div>
+      <div><div class="legende">Liaison vue par le robot</div><div class="valeur"><span id="v-lien" class="pastille neutre">inconnue</span></div></div>
+      <div><div class="legende">Vitesse</div><div class="valeur" id="v-vitesse">—</div></div>
+      <div><div class="legende">Mode</div><div class="valeur" id="v-mode">—</div></div>
+      <div><div class="legende">Signal Wi-Fi</div><div class="valeur" id="v-rssi">—</div></div>
+      <div><div class="legende">En marche depuis</div><div class="valeur" id="v-uptime">—</div></div>
+    </div>
+    <p class="legende" id="v-age" style="margin:10px 0 0">Aucun statut reçu.</p>
+  </section>
+
+  <section class="carte" aria-labelledby="t-incl">
+    <h2 id="t-incl">Inclinaison</h2>
+    <div class="grille">
+      <div><div class="legende">Roulis (latéral)</div><div class="valeur" id="v-roll">—</div></div>
+      <div><div class="legende">Tangage (avant/arrière)</div><div class="valeur" id="v-pitch">—</div></div>
+      <div><div class="legende">Capteur</div><div class="valeur"><span id="v-imu" class="pastille neutre">inconnu</span></div></div>
+    </div>
+  </section>
+
+  <section class="carte" aria-labelledby="t-hb">
+    <h2 id="t-hb">Signes de vie</h2>
+    <div class="ligne">
+      <button id="bt-hb" type="button" disabled>Envoyer les signes de vie</button>
+      <span id="etat-hb" class="pastille neutre">arrêtés</span>
+    </div>
+    <p class="note">Un message « 1 » est envoyé toutes les 0,3 s sur <code>rover/rover-01/cmd/hb</code>. Si les signes cessent, le robot déclare la liaison perdue environ 1 s plus tard et s'arrête. Cette page remplace la boucle lancée depuis la VM.</p>
+  </section>
+
+  <section class="carte" aria-labelledby="t-cmd">
+    <h2 id="t-cmd">Commande</h2>
+    <div class="cmd">
+      <div class="choix" role="radiogroup" aria-label="Mode de commande">
+        <label><input type="radio" name="mode" value="latch" checked> Une pression : le robot continue seul (latch)</label>
+        <label><input type="radio" name="mode" value="hold"> Rester appuyé : le robot avance tant que le bouton est tenu (hold)</label>
+      </div>
+      <label>Vitesse : <strong id="v-curseur">30 %</strong>
+        <input id="curseur" type="range" min="0" max="100" step="5" value="30" aria-label="Vitesse en pourcentage">
+      </label>
+      <div class="boutons">
+        <button id="bt-avancer" class="gros avancer" type="button" disabled>Avancer</button>
+        <button id="bt-stop" class="gros stop" type="button" disabled>STOP</button>
+      </div>
+      <p class="legende" id="v-cmd">Aucune commande envoyée.</p>
+    </div>
+    <p class="note">Mode « une pression » : un clic sur Avancer, le robot garde la vitesse tant que les signes de vie arrivent. Mode « rester appuyé » : la commande est répétée toutes les 0,15 s tant que le bouton est tenu ; le robot s'arrête dès que vous relâchez. La touche <kbd>Espace</kbd> ou <kbd>Échap</kbd> arrête le robot dans les deux modes.</p>
+  </section>
+
+  <section class="carte" aria-labelledby="t-journal">
+    <h2 id="t-journal">Messages reçus</h2>
+    <pre id="journal" aria-live="off">En attente de connexion…</pre>
+  </section>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/mqtt@5.3.4/dist/mqtt.min.js"></script>
+<script>
+"use strict";
+const RACINE = "rover/rover-01";
+const T = {
+  status: RACINE + "/status", online: RACINE + "/online", imu: RACINE + "/imu",
+  calib: RACINE + "/calib", hb: RACINE + "/cmd/hb", drive: RACINE + "/cmd/drive"
+};
+const PERIODE_HB_MS = 300;
+const $ = (id) => document.getElementById(id);
+
+let client = null;
+let dernierStatutMs = 0;
+let etatOnline = null;   // dernier état reçu sur le sujet "online" : "true", "false", ou null (rien reçu)
+
+// ---------- Utilitaires d'affichage ----------
+function pastille(el, texte, classe) {
+  el.textContent = texte;
+  el.className = "pastille " + classe;
+}
+
+// Case « Robot » : « en ligne » ou « hors ligne » seulement si la page est connectée au broker
+// et que l'information est récente ; sinon « inconnu ».
+function majRobot() {
+  const el = $("v-online");
+  const connecte = !!(client && client.connected);
+  const age = dernierStatutMs ? (Date.now() - dernierStatutMs) / 1000 : 0;
+  if (!connecte || etatOnline === null) pastille(el, "inconnu", "neutre");
+  else if (etatOnline === "false") pastille(el, "hors ligne", "alerte");
+  else if (age > 6) pastille(el, "inconnu", "neutre");
+  else pastille(el, "en ligne", "ok");
+}
+
+// Quand la page n'est plus connectée au broker, les dernières valeurs affichées ne sont plus fiables.
+function effacerStatut() {
+  etatOnline = null;
+  dernierStatutMs = 0;
+  pastille($("v-lien"), "inconnue", "neutre");
+  ["v-vitesse", "v-mode", "v-rssi", "v-uptime"].forEach((id) => { $(id).textContent = "—"; });
+  $("v-age").textContent = "Aucun statut reçu.";
+  $("v-age").className = "legende";
+  majRobot();
+}
+function lire(cle) { try { return localStorage.getItem(cle); } catch (e) { return null; } }
+function ecrire(cle, v) { try { localStorage.setItem(cle, v); } catch (e) { /* stockage indisponible : sans importance */ } }
+
+function formatDuree(s) {
+  s = Math.max(0, Math.round(s));
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), r = s % 60;
+  return h ? `${h} h ${String(m).padStart(2, "0")} min` : m ? `${m} min ${String(r).padStart(2, "0")} s` : `${r} s`;
+}
+function journaliser(sujet, texte) {
+  const j = $("journal");
+  const heure = new Date().toLocaleTimeString("fr-CA");
+  if (j.dataset.vide !== "non") { j.textContent = ""; j.dataset.vide = "non"; }
+  const lignes = j.textContent.split("\n").filter(Boolean);
+  lignes.unshift(`${heure}  ${sujet.replace(RACINE + "/", "")}  ${texte}`);
+  j.textContent = lignes.slice(0, 40).join("\n");
+}
+
+// ---------- Minuteries : un Web Worker, pour que le navigateur ne ralentisse pas
+// la minuterie quand l'onglet est en arrière-plan (secours : setInterval) ----------
+function creerMinuterie(periodeMs, action) {
+  let worker = null, secours = null;
+  return {
+    demarrer() {
+      if (worker || secours) return;
+      try {
+        const code = "let id=null;onmessage=(e)=>{if(e.data==='start'){if(id)clearInterval(id);id=setInterval(()=>postMessage(1)," + periodeMs + ");}else{clearInterval(id);id=null;}};";
+        worker = new Worker(URL.createObjectURL(new Blob([code], { type: "text/javascript" })));
+        worker.onmessage = action;
+        worker.postMessage("start");
+      } catch (e) { worker = null; secours = setInterval(action, periodeMs); }
+    },
+    arreter() {
+      if (worker) { worker.postMessage("stop"); worker.terminate(); worker = null; }
+      if (secours) { clearInterval(secours); secours = null; }
+    }
+  };
+}
+
+// ---------- Signes de vie ----------
+let hbActif = false;
+function envoyerHb() {
+  if (client && client.connected) client.publish(T.hb, "1", { qos: 0 });
+}
+const minuterieHb = creerMinuterie(PERIODE_HB_MS, envoyerHb);
+function demarrerHb() {
+  if (hbActif) return;
+  hbActif = true;
+  minuterieHb.demarrer();
+  envoyerHb();
+  majBoutonHb();
+}
+function arreterHb() {
+  hbActif = false;
+  minuterieHb.arreter();
+  majBoutonHb();
+}
+function majBoutonHb() {
+  const bt = $("bt-hb"), connecte = !!(client && client.connected);
+  bt.disabled = !connecte;
+  bt.classList.toggle("actif", hbActif);
+  bt.textContent = hbActif ? "Arrêter les signes de vie" : "Envoyer les signes de vie";
+  pastille($("etat-hb"), hbActif ? "envoyés toutes les 0,3 s" : "arrêtés", hbActif ? "ok" : "neutre");
+  majCommande();
+}
+$("bt-hb").addEventListener("click", () => (hbActif ? arreterHb() : demarrerHb()));
+
+// ---------- Commande ----------
+const PERIODE_HOLD_MS = 150;       // doit rester bien sous les 500 ms du robot
+let enMarche = false;              // mode « une pression » : vitesse en cours
+let bouton = false;                // mode « rester appuyé » : bouton tenu
+
+function modeChoisi() { return document.querySelector('input[name="mode"]:checked').value; }
+function vitesseChoisie() { return parseInt($("curseur").value, 10); }
+
+function publierCommande(vitesse) {
+  if (!(client && client.connected)) return false;
+  const msg = JSON.stringify({ mode: modeChoisi(), speed: vitesse });
+  client.publish(T.drive, msg, { qos: 0 });
+  return msg;
+}
+function afficherCommande(texte) { $("v-cmd").textContent = texte; }
+
+const minuterieHold = creerMinuterie(PERIODE_HOLD_MS, () => { if (bouton) publierCommande(vitesseChoisie()); });
+
+function arret(raison) {
+  const etait = enMarche || bouton;
+  enMarche = false; bouton = false;
+  minuterieHold.arreter();
+  $("bt-avancer").classList.remove("presse");
+  const msg = publierCommande(0);
+  if (etait || raison === "bouton") afficherCommande(msg ? "STOP envoyé" + (raison ? " (" + raison + ")" : "") + "." : "STOP impossible : page déconnectée.");
+}
+function avancer() {
+  if (modeChoisi() === "hold") {
+    if (bouton) return;
+    bouton = true;
+    $("bt-avancer").classList.add("presse");
+    publierCommande(vitesseChoisie());
+    minuterieHold.demarrer();
+    afficherCommande("Avance à " + vitesseChoisie() + " % tant que le bouton est tenu.");
+  } else {
+    const v = vitesseChoisie();
+    if (v === 0) { afficherCommande("Vitesse à 0 : rien à envoyer."); return; }
+    enMarche = true;
+    publierCommande(v);
+    afficherCommande("Ordre envoyé : avance à " + v + " %" + (hbActif ? "." : ". Attention : signes de vie arrêtés, le robot s'arrêtera dans 1 s."));
+  }
+}
+function majCommande() {
+  const connecte = !!(client && client.connected);
+  $("bt-avancer").disabled = !connecte;
+  $("bt-stop").disabled = !connecte;
+}
+
+$("curseur").addEventListener("input", () => {
+  $("v-curseur").textContent = vitesseChoisie() + " %";
+  if (enMarche) { publierCommande(vitesseChoisie()); afficherCommande("Vitesse changée : " + vitesseChoisie() + " %."); }
+});
+document.querySelectorAll('input[name="mode"]').forEach((r) => r.addEventListener("change", () => {
+  if (enMarche || bouton) arret("changement de mode");
+}));
+
+const bAvancer = $("bt-avancer");
+bAvancer.addEventListener("pointerdown", (e) => {
+  if (modeChoisi() === "hold") { bAvancer.setPointerCapture(e.pointerId); avancer(); }
+});
+["pointerup", "pointercancel", "lostpointercapture"].forEach((ev) =>
+  bAvancer.addEventListener(ev, () => { if (modeChoisi() === "hold" && bouton) arret("bouton relâché"); }));
+bAvancer.addEventListener("click", () => { if (modeChoisi() === "latch") avancer(); });
+$("bt-stop").addEventListener("click", () => arret("bouton"));
+document.addEventListener("keydown", (e) => {
+  if ((e.code === "Space" || e.key === "Escape") && client && client.connected) {
+    if (document.activeElement && document.activeElement.tagName === "INPUT" && document.activeElement.type !== "range" && document.activeElement.type !== "radio") return;
+    e.preventDefault(); arret("touche");
+  }
+});
+window.addEventListener("blur", () => { if (bouton) arret("fenêtre quittée"); });
+document.addEventListener("visibilitychange", () => { if (document.hidden && bouton) arret("onglet masqué"); });
+
+// ---------- Réception ----------
+function traiter(sujet, brut) {
+  const texte = brut.toString();
+  journaliser(sujet, texte);
+  if (sujet === T.online) {
+    etatOnline = texte === "true" ? "true" : "false";
+    majRobot();
+    return;
+  }
+  let d;
+  try { d = JSON.parse(texte); } catch (e) { return; }
+  if (sujet === T.status) {
+    dernierStatutMs = Date.now();
+    majRobot();
+    pastille($("v-lien"), d.link === "ok" ? "ok" : "perdue", d.link === "ok" ? "ok" : "alerte");
+    $("v-vitesse").textContent = (d.speed ?? "—") + " %";
+    $("v-mode").textContent = d.mode === "latch" ? "une pression (latch)" : d.mode === "hold" ? "rester appuyé (hold)" : "—";
+    $("v-rssi").textContent = d.rssi != null ? d.rssi + " dBm" : "—";
+    $("v-uptime").textContent = d.uptime != null ? formatDuree(d.uptime) : "—";
+  } else if (sujet === T.imu) {
+    if (d.imu === "error") {
+      pastille($("v-imu"), "en panne", "alerte");
+      $("v-roll").textContent = "—"; $("v-pitch").textContent = "—";
+    } else {
+      pastille($("v-imu"), d.calibrated ? "étalonné" : "non étalonné", d.calibrated ? "ok" : "info");
+      $("v-roll").textContent = d.roll.toFixed(1) + "°";
+      $("v-pitch").textContent = d.pitch.toFixed(1) + "°";
+    }
+  }
+}
+
+setInterval(() => {   // âge du dernier statut
+  majRobot();
+  const el = $("v-age");
+  if (!dernierStatutMs) return;
+  const s = (Date.now() - dernierStatutMs) / 1000;
+  el.textContent = s > 6 ? `Dernier statut reçu il y a ${Math.round(s)} s : le robot ne répond plus.` : "Statut à jour.";
+  el.className = "legende" + (s > 6 ? " alerte" : "");
+}, 1000);
+
+// ---------- Connexion ----------
+// phases : "arret" (aucune connexion), "connexion" (premier essai), "ok",
+//          "reconnexion" (la bibliothèque réessaie seule toutes les 2 s)
+let phase = "arret", essais = 0, derniereCause = "";
+
+function etatConnexion(texte, classe) { pastille($("etat-connexion"), texte, classe); }
+
+function afficherConnexion() {
+  const bt = $("bt-connexion"), det = $("detail-connexion");
+  det.className = "legende";
+  if (phase === "arret") {
+    etatConnexion("déconnecté", "neutre");
+    bt.textContent = "Se connecter"; bt.className = "principal";
+    det.textContent = derniereCause ? "Dernière cause : " + derniereCause : "";
+  } else if (phase === "connexion") {
+    etatConnexion("connexion…", "info");
+    bt.textContent = "Annuler"; bt.className = "";
+    det.textContent = "";
+  } else if (phase === "ok") {
+    etatConnexion("connecté", "ok");
+    bt.textContent = "Se déconnecter"; bt.className = "";
+    det.textContent = "";
+  } else {
+    etatConnexion("reconnexion automatique (essai " + Math.max(1, essais) + ")", "alerte");
+    bt.textContent = "Arrêter la reconnexion"; bt.className = "";
+    det.className = "legende alerte";
+    det.textContent = "La page se reconnecte seule : n'appuyez sur rien, attendez quelques secondes." +
+      (derniereCause ? " Dernière cause : " + derniereCause + "." : "");
+  }
+  majBoutonHb();
+}
+
+function messageErreur(e) {
+  const t = e && e.message ? e.message : String(e);
+  if (/not authorized|bad user|identifier|refused/i.test(t)) return "identifiants refusés par le broker (" + t + ")";
+  return t || "inconnue";
+}
+
+function connecter() {
+  const url = $("url").value.trim();
+  if (!/^wss?:\/\//.test(url)) { derniereCause = "adresse invalide (elle doit commencer par ws:// ou wss://)"; phase = "arret"; afficherConnexion(); return; }
+  ecrire("pilotage.url", url); ecrire("pilotage.user", $("utilisateur").value);
+  essais = 0; derniereCause = ""; phase = "connexion"; afficherConnexion();
+  client = mqtt.connect(url, {
+    username: $("utilisateur").value, password: $("mdp").value,
+    clientId: "pilotage-" + Math.random().toString(16).slice(2, 8),
+    keepalive: 30, reconnectPeriod: 2000, connectTimeout: 8000, clean: true
+  });
+  client.on("connect", () => {
+    phase = "ok"; essais = 0; derniereCause = "";
+    afficherConnexion();
+    client.subscribe([T.status, T.online, T.imu, T.calib], { qos: 0 }, (err) => {
+      if (err) { derniereCause = "abonnement refusé"; afficherConnexion(); }
+    });
+  });
+  client.on("reconnect", () => { essais++; phase = "reconnexion"; afficherConnexion(); });
+  client.on("close", () => {
+    enMarche = false; bouton = false; minuterieHold.arreter();   // aucune commande ne reste en mémoire côté page
+    effacerStatut();
+    if (client) { if (phase === "ok") derniereCause = "connexion perdue"; if (phase !== "connexion") phase = "reconnexion"; }
+    afficherConnexion();
+  });
+  client.on("error", (e) => { derniereCause = messageErreur(e); afficherConnexion(); });
+  client.on("message", traiter);
+}
+
+function deconnecter() {
+  arret("");
+  arreterHb();
+  const c = client; client = null; phase = "arret"; essais = 0;
+  if (c) c.end(true);
+  effacerStatut();
+  afficherConnexion();
+}
+
+$("bt-connexion").addEventListener("click", () => (client ? deconnecter() : connecter()));
+$("mdp").addEventListener("keydown", (e) => { if (e.key === "Enter" && !client) connecter(); });
+window.addEventListener("beforeunload", () => { if (client && client.connected && (enMarche || bouton)) publierCommande(0); if (client) client.end(true); });
+
+const u = lire("pilotage.url"), n = lire("pilotage.user");
+if (u) $("url").value = u;
+if (n) $("utilisateur").value = n;
+if (typeof mqtt === "undefined") etatConnexion("bibliothèque MQTT introuvable (connexion Internet requise)", "alerte");
+</script>
+</body>
+</html>
