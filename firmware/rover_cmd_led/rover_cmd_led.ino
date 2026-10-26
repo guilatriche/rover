@@ -23,6 +23,15 @@ const int PIN_LED = 14;
 const int PWM_FREQ = 5000;
 const int PWM_RES = 8;                        // 0..255
 
+// Essai : forcer le robot sur un point d'accès précis (adresse BSSID et canal).
+// Mettre FORCER_POINT_ACCES à 0 pour revenir au choix automatique.
+#define FORCER_POINT_ACCES 0
+const uint8_t BSSID_CIBLE[6] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};   // à remplir seulement pour un essai
+const int CANAL_CIBLE = 1;
+
+// Version du programme : à changer à chaque modification publiée (date + mot-clé).
+const char *VERSION_PROGRAMME = "2026-10-26-diag";
+
 const char *RACINE = "rover/rover-01";
 const unsigned long DELAI_LIEN_MS = 1000;     // signal de vie
 const unsigned long DELAI_HOLD_MS = 500;      // mode maintenu
@@ -42,6 +51,23 @@ int vitesseAppliquee = -1;
 unsigned long tStatut = 0;
 unsigned long tTentativeMqtt = 0;
 
+// Cause du dernier redémarrage : "poweron" (mise sous tension), "brownout" (tension trop basse),
+// "panic" (plantage du programme), "watchdog" (programme bloqué), "software", etc.
+const char *causeRedemarrage() {
+  switch (esp_reset_reason()) {
+    case ESP_RST_POWERON:   return "poweron";
+    case ESP_RST_EXT:       return "ext";
+    case ESP_RST_SW:        return "software";
+    case ESP_RST_PANIC:     return "panic";
+    case ESP_RST_INT_WDT:   return "watchdog_int";
+    case ESP_RST_TASK_WDT:  return "watchdog_task";
+    case ESP_RST_WDT:       return "watchdog";
+    case ESP_RST_DEEPSLEEP: return "deepsleep";
+    case ESP_RST_BROWNOUT:  return "brownout";
+    default:                return "autre";
+  }
+}
+
 void appliquerLed(int vitesse) {
   if (vitesse == vitesseAppliquee) return;
   vitesseAppliquee = vitesse;
@@ -51,14 +77,19 @@ void appliquerLed(int vitesse) {
 
 void publierStatut() {
   if (!mqtt.connected()) return;
-  StaticJsonDocument<160> doc;
+  StaticJsonDocument<384> doc;
+  doc["version"] = VERSION_PROGRAMME;
   doc["uptime"] = millis() / 1000;
+  doc["reset"] = causeRedemarrage();          // cause du dernier redémarrage
+  doc["silence"] = tDernierSigne == 0 ? -1 : (long)(millis() - tDernierSigne);  // ms depuis le dernier signe de vie
   doc["network"] = "wifi";
   doc["rssi"] = WiFi.RSSI();
+  doc["bssid"] = WiFi.BSSIDstr();             // point d'accès auquel le robot est connecté
+  doc["canal"] = WiFi.channel();
   doc["link"] = lienOk ? "ok" : "lost";
   doc["speed"] = vitesseAppliquee < 0 ? 0 : vitesseAppliquee;
   doc["mode"] = modeMaintenu ? "hold" : "latch";
-  char tampon[160];
+  char tampon[384];
   serializeJson(doc, tampon);
   mqtt.publish(topicStatus, tampon);
 }
@@ -121,7 +152,10 @@ void surveillerLien() {
   bool changement = (vie != lienOk);
   if (changement) {
     lienOk = vie;
-    Serial.println(vie ? "[LIEN] etabli" : "[LIEN] perdu : arret");
+    if (vie) Serial.println("[LIEN] etabli");
+    else Serial.printf("[LIEN] perdu : arret (silence %lu ms, mqtt %s, wifi rssi %d, bssid %s, canal %d)\n",
+                       maintenant - tDernierSigne, mqtt.connected() ? "connecte" : "deconnecte", WiFi.RSSI(),
+                       WiFi.BSSIDstr().c_str(), WiFi.channel());
   }
 
   if (!vie) {                                 // liaison perdue : arrêt et oubli de la commande
@@ -144,6 +178,8 @@ void setup() {
   Serial.begin(115200);
   delay(500);
   Serial.println("\n[ROVER] commande LED par MQTT");
+  Serial.printf("[ROVER] version %s\n", VERSION_PROGRAMME);
+  Serial.printf("[ROVER] cause du dernier redemarrage : %s\n", causeRedemarrage());
 
   pinMode(PIN_LED, OUTPUT);
   digitalWrite(PIN_LED, LOW);                 // évite la lueur du démarrage (pull-up interne)
@@ -156,11 +192,17 @@ void setup() {
   snprintf(topicOnline, sizeof(topicOnline), "%s/online", RACINE);
 
   WiFi.mode(WIFI_STA);
+  WiFi.setSleep(false);                       // pas d'économie d'énergie Wi-Fi : moins de retards d'arrivée
+#if FORCER_POINT_ACCES
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD, CANAL_CIBLE, BSSID_CIBLE);
+#else
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+#endif
 
   mqtt.setServer(MQTT_HOST, MQTT_PORT);
   mqtt.setCallback(surMessage);
   mqtt.setKeepAlive(5);
+  mqtt.setBufferSize(512);                    // statut plus long avec la version (défaut : 256 octets)
 }
 
 void loop() {
@@ -168,7 +210,8 @@ void loop() {
   bool wifiMaintenant = (WiFi.status() == WL_CONNECTED);
   if (wifiMaintenant != wifiAvant) {
     wifiAvant = wifiMaintenant;
-    if (wifiMaintenant) Serial.printf("[WIFI] connecte, adresse %s\n", WiFi.localIP().toString().c_str());
+    if (wifiMaintenant) Serial.printf("[WIFI] connecte, adresse %s, rssi %d, bssid %s, canal %d\n", WiFi.localIP().toString().c_str(),
+                                        WiFi.RSSI(), WiFi.BSSIDstr().c_str(), WiFi.channel());
     else Serial.println("[WIFI] deconnecte");
   }
 

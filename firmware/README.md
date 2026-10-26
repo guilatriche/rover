@@ -11,7 +11,7 @@ Programmes Arduino IDE pour la carte LilyGO T-A7670 (ESP32). Chaque dossier est 
 | `tests/test_03_mpu_brut` | 2026-10-24 | Diagnostic du MPU6050 : identité, valeurs brutes, température |
 | `tests/test_04_mpu_mqtt` | 2026-10-24 | Le MPU6050 publie roulis et tangage bruts sur `rover/rover-01/imu`, une fois par seconde |
 | `tests/test_05_mpu_calibration` | 2026-10-24 | Étalonnage du MPU6050 sur ordre MQTT (`cmd/calib`), référence mémorisée en flash, publication de l'inclinaison corrigée |
-| `rover_cmd_led` | 2026-10-24 | Commande d'une LED par MQTT avec signal de vie et arrêt de sécurité |
+| `rover_cmd_led` | 2026-10-24, diagnostic ajouté le 2026-10-26 | Commande d'une LED par MQTT avec signal de vie et arrêt de sécurité. Version du 26 octobre : le statut contient aussi la cause du dernier redémarrage (`reset`), le silence mesuré (`silence`), le point d'accès (`bssid`) et le canal ; option `FORCER_POINT_ACCES` (désactivée) pour un essai sur un point d'accès précis ; champ `version` (`2026-10-26-diag`) dans le statut et au démarrage (moniteur série). La page de pilotage ne l'affiche pas |
 
 ## Branchements utilisés
 
@@ -52,9 +52,3 @@ Les programmes qui se connectent au réseau lisent `secrets.h`, placé à côté
 - **Mode maintenu (`hold`)** : la commande doit être renvoyée toutes les 0,5 s, sinon arrêt.
 - **Mode mémorisé (`latch`)** : la commande reste active tant que le signal de vie arrive.
 - Après une perte de liaison, la commande est effacée : rien ne redémarre tout seul.
-
-## Inclinaison du MPU6050 (tests 04 et 05)
-
-- Test 04 : publie `{"roll":..,"pitch":..}` sur `rover/rover-01/imu`, une fois par seconde (valeurs brutes). Si le capteur ne répond pas : `{"imu":"error"}`.
-- Test 05 : même publication avec un étalonnage. Le message `go` sur `rover/rover-01/cmd/calib` mesure 2 s et mémorise la position « à plat » dans la flash ; `reset` l'efface. L'étalonnage est refusé si le capteur bouge. Le résultat est publié sur `rover/rover-01/calib`, et `imu` contient `calibrated:true|false`.
-- À refaire si le capteur est déplacé ou fixé autrement sur le robot.
