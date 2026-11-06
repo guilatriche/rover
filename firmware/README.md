@@ -11,6 +11,9 @@ Programmes Arduino IDE pour la carte LilyGO T-A7670 (ESP32). Chaque dossier est 
 | `tests/test_03_mpu_brut` | 2026-10-24 | Diagnostic du MPU6050 : identité, valeurs brutes, température |
 | `tests/test_04_mpu_mqtt` | 2026-10-24 | Le MPU6050 publie roulis et tangage bruts sur `rover/rover-01/imu`, une fois par seconde |
 | `tests/test_05_mpu_calibration` | 2026-10-24 | Étalonnage du MPU6050 sur ordre MQTT (`cmd/calib`), référence mémorisée en flash, publication de l'inclinaison corrigée |
+| `tests/test_06_transistor_sabertooth` | 2026-11-05 | Impulsion de largeur fixe (50 Hz) de la broche 18 vers S1 du Sabertooth, à travers un transistor 2N3904 |
+| `tests/test_07_sabertooth_sequence` | 2026-11-05 | Séquence 1600 / 1500 / 1400 / 1500 us vers S1, valeur en cours sur le port série |
+| `tests/test_08_minuterie_surveillance` | 2026-11-05 | Programme bloqué volontairement et minuterie de surveillance de 2 s qui redémarre l'ESP32 |
 | `rover_cmd_led` | 2026-10-24, diagnostic ajouté le 2026-10-26 | Commande d'une LED par MQTT avec signal de vie et arrêt de sécurité. Version du 26 octobre : le statut contient aussi la cause du dernier redémarrage (`reset`), le silence mesuré (`silence`), le point d'accès (`bssid`) et le canal ; option `FORCER_POINT_ACCES` (désactivée) pour un essai sur un point d'accès précis ; champ `version` (`2026-10-26-diag`) dans le statut et au démarrage (moniteur série). La page de pilotage ne l'affiche pas |
 
 ## Branchements utilisés
