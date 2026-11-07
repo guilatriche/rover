@@ -65,7 +65,7 @@ Une sixième combinaison, « radiocommande indépendante » (B H B B H H), n'est
 
 ## Tableau des résultats
 
-Les critères éliminatoires sont les quatre premières lignes. Un échec à l'un d'eux écarte le mode, quelles que soient ses performances, et les critères suivants ne sont plus testés pour ce mode (« non testé (éliminé) »). Les cases vides sont les essais encore à faire : le montage analogique reste à construire et la série simplifiée reste à essayer.
+Les critères éliminatoires sont les quatre premières lignes. Un échec à l'un d'eux écarte le mode, quelles que soient ses performances, et les critères suivants ne sont plus testés pour ce mode (« non testé (éliminé) »). Les cases vides sont les essais encore à faire : le montage analogique reste à construire et la série simplifiée n'a pas encore été jugée avec les critères.
 
 - **E1** : arrêt des roues quand l'ESP32 est éteinte, débranchée ou en réinitialisation (panne d'alimentation, câble débranché). Seuil : arrêt en 1 s au plus.
 - **E2** : arrêt des roues quand le programme de l'ESP32 est figé alors qu'elle reste alimentée (blocage du réseau ou d'une bibliothèque). Seuil : arrêt au plus 3 s après le blocage.
@@ -78,7 +78,7 @@ Les critères éliminatoires sont les quatre premières lignes. Un échec à l'u
 | --- | --- | --- | --- | --- | --- |
 | E1 : arrêt si ESP32 coupée |  | réussi (immédiat) | **échec** (dernière commande gardée) |  | réussi |
 | E2 : arrêt si programme figé |  | réussi (≈ 3 s) | non testé (éliminé) |  | réussi |
-| E3 : pas de mouvement au démarrage |  | **échec** (centre décalé si la Sabertooth redémarre) | non testé (éliminé) |  | réussi |
+| E3 : pas de mouvement au démarrage |  | **échec** (si la Sabertooth redémarre en marche, l'ordre d'arrêt ne l'arrête plus) | non testé (éliminé) |  | réussi |
 | E4 : reprise sans intervention |  | réussi pour l'ESP32, échec si la Sabertooth redémarre | réussi pour l'ESP32 |  | réussi |
 | P1 : côtés indépendants |  | réussi | réussi |  |  |
 | P2 : résolution et zone morte |  | réussi (15 paliers ; zone morte ±55 µs, se décale) | réussi (≈ 18 paliers ; zone morte ≈ 1440 à 1488 µs) |  |  |
@@ -100,16 +100,16 @@ Chaque échec du tableau est expliqué ici : ce qui a été fait, ce qui a été
 
 ### RC différentiel exponentiel (interrupteur 6 en haut) : E3 échec
 
-- **Essai** : l'ESP32 envoie « S1 avant » (1600 µs) ; la Sabertooth est éteinte puis rallumée pendant l'envoi.
-- **Observation (constat de Guillaume, fait établi)** : les ordres sont inversés. À la commande d'arrêt (1500 µs), les roues avancent ; à la commande d'avance (1600 µs), elles s'arrêtent.
-- **Explication du mécanisme (hypothèse ; seul le mécanisme est supposé, pas le constat)** : dans ce mode, la Sabertooth apprend le point neutre à partir des premières impulsions reçues après l'allumage. Elle a démarré pendant que l'ESP32 envoyait 1600 µs et a pris 1600 µs pour le neutre ; 1500 µs devient alors une commande « en arrière » de ce neutre.
+- **Essai** : l'ESP32 envoie « S1 avant » (1600 µs) ; la Sabertooth est coupée au moins 5 s puis rallumée pendant l'envoi, l'ESP32 restant en marche. Un premier essai, mélangé à un blocage volontaire du programme, n'était pas exploitable.
+- **Observation (constat de Guillaume, fait établi)** : quand le programme revient à « Arrêt » (1500 µs), les roues continuent d'avancer ; quand il envoie « S1 avant » (1600 µs), elles s'arrêtent.
+- **Explication** : dans ce mode, la Sabertooth se recalibre à chaque remise sous tension : elle prend pour position d'arrêt (le « neutre ») la largeur d'impulsion qu'elle reçoit juste après son allumage (observé les 5 et 7 novembre). Ici elle s'est rallumée pendant que l'ESP32 envoyait 1600 µs et a donc pris 1600 µs pour l'arrêt ; 1500 µs est alors vu comme un ordre « en arrière » par rapport à ce nouvel arrêt. Le décalage dépend donc de l'étape du programme où se trouve l'ESP32 au moment où la Sabertooth s'allume. Seul un allumage de la Sabertooth la recalibre : le redémarrage de l'ESP32 seule ne change pas l'arrêt (essai 9 du journal du 5 novembre).
 - **Cas qui fonctionne** : si la Sabertooth est allumée quand l'ESP32 envoie déjà 1500 µs, le comportement est normal. Une remise sous tension avec 1500 µs envoyé rétablit le comportement.
 - **Conséquence** : une micro-coupure ou un creux de tension de la Sabertooth pendant que le robot roule le fait repartir avec un mauvais neutre : l'arrêt n'arrête plus et le robot réagit à l'inverse des ordres. C'est le risque pour les personnes que le critère E3 doit exclure.
 
 ### RC différentiel exponentiel : E4 échec si la Sabertooth redémarre
 
 - **Observation** : après une panne de l'ESP32, les commandes reprennent seules (réussi). Après un redémarrage de la Sabertooth pendant un mouvement, elles ne reprennent pas correctement.
-- **Cause** : la même que pour E3 (neutre mal appris).
+- **Cause** : la même que pour E3 (arrêt mal appris à l'allumage de la Sabertooth).
 - **Conséquence** : sans intervention (arrêt complet de l'alimentation de la Sabertooth), le robot reste inutilisable après une micro-coupure de sa batterie.
 
 ### RC microcontrôleur (interrupteur 6 en bas) : E1 échec
@@ -171,7 +171,7 @@ Ce qui a été observé, mode par mode. Les échecs sont expliqués plus haut da
 
 ### Série simplifiée
 
-- Pas encore essayée. D'après sa description, la Sabertooth n'a pas de délai d'attente (elle ne s'arrête pas d'elle-même quand les ordres cessent) et chaque moteur garde sa dernière commande : à confirmer lors de l'essai.
+- Essayée le 7 novembre (essai 1 du journal) : les valeurs 1 à 127 commandent le moteur 1 (64 = arrêt), 128 à 255 le moteur 2 (192 = arrêt), 0 arrête les deux. Chaque moteur garde sa dernière commande ; aucun délai d'attente observé. Les critères E1 à E4 et les suivants restent à tester.
 
 ### Analogique
 
