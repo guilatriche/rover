@@ -353,7 +353,7 @@ setInterval(() => {   // âge du dernier statut
 
 // ---------- Connexion ----------
 // phases : "arret" (aucune connexion), "connexion" (premier essai), "ok",
-//          "reconnexion" (la bibliothèque réessaie seule toutes les 2 s)
+//          "reconnexion" (la bibliothèque réessaie seule toutes les 0,25 s)
 let phase = "arret", essais = 0, derniereCause = "";
 
 function etatConnexion(texte, classe) { pastille($("etat-connexion"), texte, classe); }
@@ -397,7 +397,7 @@ function connecter() {
   client = mqtt.connect(url, {
     username: $("utilisateur").value, password: $("mdp").value,
     clientId: "pilotage-" + Math.random().toString(16).slice(2, 8),
-    keepalive: 30, reconnectPeriod: 2000, connectTimeout: 8000, clean: true
+    keepalive: 30, reconnectPeriod: 250, connectTimeout: 8000, clean: true   // 250 ms : reconnexion rapide après une fermeture par Cloudflare (essai du 10 novembre ; avant : 2000)
   });
   client.on("connect", () => {
     phase = "ok"; essais = 0; derniereCause = "";
